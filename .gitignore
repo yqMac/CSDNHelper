@@ -1,0 +1,6 @@
+*.exe
+*.txt
+/obj/
+/Release/
+/Logs/
+*.pdb
