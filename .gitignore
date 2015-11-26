@@ -1,6 +1,7 @@
 *.exe
 *.txt
-/obj/
-/Release/
-/Logs/
+!readme.txt
+obj/
+Release/
+Logs/
 *.pdb
