@@ -911,7 +911,7 @@ namespace xCsdn
         {
             string reText = "";
             string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-
+            Thread.Sleep(5000);
             HttpItems item = new HttpItems();
             HttpHelpers heler = new HttpHelpers();
             HttpResults hr = new HttpResults();
@@ -947,10 +947,10 @@ namespace xCsdn
                     status[0] = "注册帐号";
                     status[1] = "进行中";
                     status[2] = "等待邮件到达";
-                    status[3] = "20秒后重新扫描";
+                    status[3] = "10秒后重新扫描";
                     status[4] = "";
                     Logscomsole(status);
-                    Thread.Sleep(20000);
+                    Thread.Sleep(10000);
                     goto CHECKEMAIL;
                 }
                 else
@@ -1398,10 +1398,10 @@ namespace xCsdn
             result = result.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
             reg = new Regex(szReg_res_url_pagecount);
             Match mat = reg.Match(result);
-            string durl = reg.Match(result).Groups[0].Value;
-            string[] ss = durl.Split(new char[] { '/', '\"' });
+            string durl = mat .Groups[1].Value;
+            string[] ss = durl.Split(new char[] { '/', '\"' }).Where <string >((o)=>{ return !string.IsNullOrEmpty(o); }).ToArray ();
             int pageCount;
-            int.TryParse(ss[6], out pageCount);
+            int.TryParse(ss[1], out pageCount);
 
             ListPreTDown = new List<CsdnResouce>();
 
@@ -1417,10 +1417,16 @@ namespace xCsdn
                 // List<string> downstr = new List<string>();
                 foreach (Match m in mc)
                 {
-                    string[] tmp1 = m.Value.Split(new char[] { '\"', '>', '<' });
-                    if (tmp1[12] == "0")
+                    //<dt><ahref="/detail/u014554531/9313813"target="_blank">TakeColor优秀屏幕取色工具</a><spanclass="marks">1</span></dt>
+                    string regforhref = "<dt><ahref=\"(.*?)\"target=\"_blank\">(.*?)</a><spanclass=\"marks\">(.*?)</span></dt>";
+                    Match mcforhref = new Regex(regforhref).Match(m.Value);
+                    string href =mcforhref.Groups[1].Value;
+                    string namefor = mcforhref.Groups[2].Value;
+                    string co = mcforhref.Groups[3].Value;
+                    //string[] tmp1 = m.Value.Split(new char[] { '\"', '>', '<' });
+                    if (co  == "0")
                     {
-                        CsdnResouce cdsr = new CsdnResouce(tmp1[6], tmp1[4]);
+                        CsdnResouce cdsr = new CsdnResouce(namefor ,href );
                         cdsr.Tag = String.Format("http://download.csdn.net{0}", cdsr.Url);
                         ListPreTDown.Add(cdsr);
                         if (pointNum != -1 && ListPreTDown.Count + DowCount >= pointNum)
