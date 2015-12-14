@@ -927,7 +927,6 @@ namespace xCsdn
             item.Postdata = string.Format("mod=ListMailsRPC&fct=List&json=%7B%22box%22%3A%22{0}%3Dmailcatch.com%22%2C%22anim%22%3Atrue%7D",emalid );//@"AJAXREQUEST=j_id3&j_id4=j_id4&javax.faces.ViewState=j_id42162&j_id4%3Apoll=j_id4%3Apoll&";
             item.Container = ccc;
             item.Allowautoredirect = true;
-        CHECKEMAIL:
             hr = heler.GetHtml(item);
             string emalurl = hr.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", "");
             if ("errorerror".Equals(emalurl))
@@ -938,34 +937,6 @@ namespace xCsdn
 
             regex = new Regex("\\&show=(.*?)\\\"\\>\\[CSDN");
             mc = regex.Matches(emalurl);
-
-            if (mc.Count == 0)
-            {
-                if (trytimes <= 10)
-                {
-                    trytimes++;
-                    status[0] = "注册帐号";
-                    status[1] = "进行中";
-                    status[2] = "等待邮件到达";
-                    status[3] = "10秒后重新扫描";
-                    status[4] = "";
-                    Logscomsole(status);
-                    Thread.Sleep(10000);
-                    goto CHECKEMAIL;
-                }
-                else
-                {
-                    status[0] = "注册帐号";
-                    status[1] = "失败";
-                    status[2] = "邮件长时间未到";
-                    status[3] = "重试申请";
-                    status[4] = "";
-                    Logscomsole(status);
-                    //reg();
-                    return "邮件长时间未到";
-                }
-
-            }
             if (mc != null && mc.Count >= 1)
             {
                 status[0] = "注册帐号";
@@ -1018,7 +989,7 @@ namespace xCsdn
 
         private string[] regForIn()
         {
-        Start:
+            Start:
             int trytimes = 0;
             string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
             status[0] = "注册帐号";
@@ -1050,7 +1021,7 @@ namespace xCsdn
             items_reg.Container = cc_reg;
             hr_reg = heler_reg.GetHtml(items_reg);
             regCodebytes = hr_reg.ResultByte;
-            
+
             if (getRegVcode != null)
             {
                 regCode = getRegVcode(regCodebytes);
@@ -1069,188 +1040,211 @@ namespace xCsdn
             //检查验证码
             //http://passport.csdn.net/account/register?action=validateCode&validateCode=
             items_reg = new HttpItems();
-            items_reg.URL = "http://passport.csdn.net/account/register?action=validateCode&validateCode="+regCode ;
+            items_reg.URL = "http://passport.csdn.net/account/register?action=validateCode&validateCode=" + regCode;
             items_reg.Container = cc_reg;
             hr_reg = heler_reg.GetHtml(items_reg);
-           if(hr_reg .Html.ToLower () !="true")
-           {
-               status[0] = "注册帐号";
-               status[1] = "失败";
-               status[2] = "识别验证码失败";
-               status[3] = "重试申请";
-               status[4] = "";
-               Logscomsole(status);
-               goto Start;
-           }
-           trytimes = 0;
-       //检查名字
-       //http://passport.csdn.net/account/register?action=validateUsername&username=
-       //检查邮箱
-       //http://passport.csdn.net/account/register?action=validateEmail&email=323423424@11.com
-       //检查验证码
-       //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-         GetMail:
-
-            email = getRegEmail2(cc_em );
-           //检查验证码
-           //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-           items_reg = new HttpItems();
-           items_reg.URL = "http://passport.csdn.net/account/register?action=validateEmail&email="+email ;
-           items_reg.Container = cc_reg;
-           hr_reg = heler_reg.GetHtml(items_reg);
-           if (hr_reg.Html.ToLower() != "true")
-           {
-               trytimes++;
-               if (trytimes< 5)
-               {
-                   status[0] = "注册帐号";
-                   status[1] = "失败";
-                   status[2] = "邮箱验证失败";
-                   status[3] = hr_reg.Html;
-                   status[4] = "";
-                   Logscomsole(status);
-                   goto GetMail;
-               }
-               else
-               {
-                   status[0] = "注册帐号";
-                   status[1] = "失败";
-                   status[2] = "邮箱验证失败次数过多";
-                   status[3] = hr_reg.Html;
-                   status[4] = "";
-                   Logscomsole(status);
-                   return new string[] { };
-               }
-           }
-           trytimes = 0;
-        GetregName:
-            name=GetName();
-           //检查名字
-           //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-           items_reg = new HttpItems();
-           items_reg.URL = "http://passport.csdn.net/account/register?action=validateUsername&username=" + name ;
-           items_reg.Container = cc_reg;
-           hr_reg = heler_reg.GetHtml(items_reg);
-           if (hr_reg.Html.ToLower() != "true")
-           {
-      
-               trytimes++;
-               if (trytimes < 5)
-               {
-                   status[0] = "注册帐号";
-                   status[1] = "失败";
-                   status[2] = "用户名验证失败";
-                   status[3] = hr_reg.Html;
-                   status[4] = "";
-                   Logscomsole(status);
-                   goto GetregName;
-               }
-               else
-               {
-                   status[0] = "注册帐号";
-                   status[1] = "失败";
-                   status[2] = "用户名验证失败次数过多";
-                   status[3] = hr_reg.Html;
-                   status[4] = "";
-                   Logscomsole(status);
-                   return new string[] { };
-               }
-           }
-                //string email = string.Format("{0}@qq.com", name);
-                string pwd = string .IsNullOrEmpty (mima )?"aa13655312932bb":mima ;
-
+            if (hr_reg.Html.ToLower() != "true")
+            {
                 status[0] = "注册帐号";
-                status[1] = "进行中";
-                status[2] = "验证成功";
-                status[3] = "用户名："+name ;
-                status[4] = "邮箱：" + email;
+                status[1] = "失败";
+                status[2] = "识别验证码失败";
+                status[3] = "重试申请";
+                status[4] = "";
                 Logscomsole(status);
-           PostRequest:
+                goto Start;
+            }
+            trytimes = 0;
+            //检查名字
+            //http://passport.csdn.net/account/register?action=validateUsername&username=
+            //检查邮箱
+            //http://passport.csdn.net/account/register?action=validateEmail&email=323423424@11.com
+            //检查验证码
+            //http://passport.csdn.net/account/register?action=validateCode&validateCode=
+            //重发激活右键
+            //http://passport.csdn.net/account/register?action=resendActiveEmail&username=
+            GetMail:
 
-                #region 提交注册请求
-                items_reg = new HttpItems();
-                string regurl = "https://passport.csdn.net/account/register?action=saveUser&isFrom=False";
-                string postdata = string.Format("fromUrl={0}&userName={1}&email={2}&password={3}&confirmpassword={4}&validateCode={5}&agree=on",
-                    string.Empty, name, email, pwd, pwd, regCode);
-                items_reg.Container = cc_reg;
-                items_reg.URL = regurl;
-                items_reg.Postdata = postdata;
-                items_reg.Method = "POST";
-                hr_reg = heler_reg.GetHtml(items_reg);
-
-                string html = hr_reg.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", "");
-
-                if (html.Contains("邮件已发送到邮箱"))
+            email = getRegEmail2(cc_em);
+            //检查验证码
+            //http://passport.csdn.net/account/register?action=validateCode&validateCode=
+            items_reg = new HttpItems();
+            items_reg.URL = "http://passport.csdn.net/account/register?action=validateEmail&email=" + email;
+            items_reg.Container = cc_reg;
+            hr_reg = heler_reg.GetHtml(items_reg);
+            if (hr_reg.Html.ToLower() != "true")
+            {
+                trytimes++;
+                if (trytimes < 5)
                 {
                     status[0] = "注册帐号";
-                    status[1] = "进行中";
-                    status[2] = "激活邮件已发送";
-                    status[3] = "等待邮件到达";
+                    status[1] = "失败";
+                    status[2] = "邮箱验证失败";
+                    status[3] = hr_reg.Html;
                     status[4] = "";
                     Logscomsole(status);
-                    string str="";
-                    if ((str = activeRegEmai2(email ,cc_em )).Contains("成功"))
-                    {
-                        status[0] = "注册帐号";
-                        status[1] = "成功";
-                        status[2] = "帐号：" + name;
-                        status[3] = "密码：" + pwd;
-                        status[4] = "";
-                        Logscomsole(status);
-                        return new string[] { name ,pwd };
-                    }
-                    else
-                    {
-                        status[0] = "注册帐号";
-                        status[1] = "失败";
-                        status[2] = "激活邮箱问题" ;
-                        status[3] = str;
-                        status[4] = "";
-                        Logscomsole(status);
-                        if (str.Contains("errorerror"))
-                        {
-                            return regForIn();
-                        }
-                        return new string[] { str  };
-                    }                    
+                    goto GetMail;
                 }
                 else
                 {
                     status[0] = "注册帐号";
                     status[1] = "失败";
+                    status[2] = "邮箱验证失败次数过多";
+                    status[3] = hr_reg.Html;
+                    status[4] = "";
+                    Logscomsole(status);
+                    return new string[] { };
+                }
+            }
+            trytimes = 0;
+            GetregName:
+            name = GetName();
+            //检查名字
+            //http://passport.csdn.net/account/register?action=validateCode&validateCode=
+            items_reg = new HttpItems();
+            items_reg.URL = "http://passport.csdn.net/account/register?action=validateUsername&username=" + name;
+            items_reg.Container = cc_reg;
+            hr_reg = heler_reg.GetHtml(items_reg);
+            if (hr_reg.Html.ToLower() != "true")
+            {
 
+                trytimes++;
+                if (trytimes < 5)
+                {
+                    status[0] = "注册帐号";
+                    status[1] = "失败";
+                    status[2] = "用户名验证失败";
+                    status[3] = hr_reg.Html;
+                    status[4] = "";
+                    Logscomsole(status);
+                    goto GetregName;
+                }
+                else
+                {
+                    status[0] = "注册帐号";
+                    status[1] = "失败";
+                    status[2] = "用户名验证失败次数过多";
+                    status[3] = hr_reg.Html;
+                    status[4] = "";
+                    Logscomsole(status);
+                    return new string[] { };
+                }
+            }
+            //string email = string.Format("{0}@qq.com", name);
+            string pwd = string.IsNullOrEmpty(mima) ? "aa13655312932bb" : mima;
 
-                    if (html.Contains("此ip单位时间内注册个数已超过限定值"))
+            status[0] = "注册帐号";
+            status[1] = "进行中";
+            status[2] = "验证成功";
+            status[3] = "用户名：" + name;
+            status[4] = "邮箱：" + email;
+            Logscomsole(status);
+            PostRequest:
+
+            #region 提交注册请求
+            items_reg = new HttpItems();
+            string regurl = "https://passport.csdn.net/account/register?action=saveUser&isFrom=False";
+            string postdata = string.Format("fromUrl={0}&userName={1}&email={2}&password={3}&confirmpassword={4}&validateCode={5}&agree=on",
+                string.Empty, name, email, pwd, pwd, regCode);
+            items_reg.Container = cc_reg;
+            items_reg.URL = regurl;
+            items_reg.Postdata = postdata;
+            items_reg.Method = "POST";
+            hr_reg = heler_reg.GetHtml(items_reg);
+            int trycount = 0;
+            WaitForEmail:
+            trycount++;
+            string html = hr_reg.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", "");
+
+            if (html.Contains("邮件已发送到邮箱"))
+            {
+
+                status[0] = "注册帐号";
+                status[1] = "进行中";
+                status[2] = "激活邮件已发送";
+                status[3] = "等待邮件到达";
+                status[4] = "";
+                Logscomsole(status);
+                string str = "";
+                if ((str = activeRegEmai2(email, cc_em)).Contains("成功"))
+                {
+                    status[0] = "注册帐号";
+                    status[1] = "成功";
+                    status[2] = "帐号：" + name;
+                    status[3] = "密码：" + pwd;
+                    status[4] = "";
+                    Logscomsole(status);
+                    return new string[] { name, pwd };
+                }
+                else
+                {
+
+                    if (trycount < 10)
                     {
-                        //if (regeristResult != null)
-                        //{
-                        //    regeristResult();
-                        //}
-                        status[2] = "此ip单位时间内注册个数已超过限定值";
-                        status[3] = "";
+                        status[0] = "注册帐号";
+                        status[1] = "进行中";
+                        status[2] = "重发邮件" + name;
+                        status[3] = "5秒后重新检测";
                         status[4] = "";
                         Logscomsole(status);
-                        return new string[] { "单位时间内注册个数已超过限定值" };
+                        HttpItems ittmp = new HttpItems()
+                        {
+                            URL = string.Format("http://passport.csdn.net/account/register?action=resendActiveEmail&username={0}", name)
+                        };
+                        hr_reg = new HttpHelpers().GetHtml(ittmp);
+                        goto WaitForEmail;
                     }
-                    else
+
+
+                    status[0] = "注册帐号";
+                    status[1] = "失败";
+                    status[2] = "激活邮箱问题";
+                    status[3] = str;
+                    status[4] = "";
+                    Logscomsole(status);
+                    if (str.Contains("errorerror"))
                     {
-                        status[2] = "验证码错误";
-                        status[3] = "重试申请";
-                        status[4] = html;
-                        Logscomsole(status);
-                        goto Start;
-                        // return;
+                        return regForIn();
                     }
+                    return new string[] { str };
                 }
-                #endregion
-           
+            }
+            else
+            {
+                status[0] = "注册帐号";
+                status[1] = "失败";
+
+
+                if (html.Contains("此ip单位时间内注册个数已超过限定值"))
+                {
+                    //if (regeristResult != null)
+                    //{
+                    //    regeristResult();
+                    //}
+                    status[2] = "此ip单位时间内注册个数已超过限定值";
+                    status[3] = "";
+                    status[4] = "";
+                    Logscomsole(status);
+                    return new string[] { "单位时间内注册个数已超过限定值" };
+                }
+                else
+                {
+                    status[2] = "验证码错误";
+                    status[3] = "重试申请";
+                    status[4] = html;
+                    Logscomsole(status);
+                    goto Start;
+                    // return;
+                }
+            }
+            #endregion
+
             status[0] = "注册帐号";
             status[1] = "失败";
             status[2] = "未知原因";
             status[3] = "";
             status[4] = "";
             Logscomsole(status);
-       
+
             return new string[] { };
         }
 

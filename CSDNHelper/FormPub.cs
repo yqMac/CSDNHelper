@@ -19,6 +19,7 @@ namespace xCsdn
         public FormPub()
         {
             InitializeComponent();
+            new yq.FormHelper().formMinIco(this ,null,null,true );
         }
         List<CsdnHelper> listCsdnH = new List<CsdnHelper>();
         string[] msgs = new string[] {
