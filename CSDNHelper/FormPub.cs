@@ -143,14 +143,30 @@ namespace xCsdn
         }
         public void showlogs(string a)
         {
-            
+            bool succ = false;
             ListViewItem lvi = new ListViewItem();
+            lvi.UseItemStyleForSubItems = false;
+            Color clrO;
+            Color clrs;
 
             string[] msgs = a.Split('\t');
             if(msgs .Length >3&&msgs [3].Contains ("失败")){
                 yq.LogHelper.Debug(a );
+                clrs  = Color.Red ;
             }
-            
+            else
+            {
+                clrs = Color.Green ;
+            }
+            if (userColor.ContainsKey(msgs[1]))
+            {
+               clrO  = userColor[msgs[1]];
+            }
+            else
+            {
+                clrO = Color.Red;
+            }
+
             lvi.Text = msgs[0];
             for (int i = 1; i < 7; i++)
             {
@@ -164,38 +180,12 @@ namespace xCsdn
                     mm = "";
                 }
                 lvi.SubItems.Add(mm);
-            }
-            //lvi.SubItems.Add(msgs [1]);
-            //lvi.SubItems.Add(txtPass.Text);
-            //lvi.SubItems.Add("未登录");
-            //lvi.Tag = cdh;
-            if (userColor.ContainsKey(msgs[1]))
-            {
-                lvi.ForeColor = userColor[msgs[1]];
-            }
-            else
-            {
-                lvi.ForeColor = Color.Red;
-            }
-            
+                lvi.SubItems[i].ForeColor = clrO;
+            } 
+            lvi.SubItems[3].ForeColor =clrs ;
 
-            this.Invoke(new Action(() => {
-  
-                //if (listView2.Items.Count > 300)
-                //{
-                //    listView2.Clear();
-                //}
-                //if (listView2.Items.Count == 0)
-                //{
-                  //  listView2.Items.Add(lvi);
-                //}
-                //else
-                {
-                    //his.richTextBox1.Text = a + "\n"+richTextBox1 .Text ;        
-                    listView2.Items.Insert(0, lvi);
-                }
-
-                //listView1.Items.Add(lvi);              
+            this.Invoke(new Action(() => { 
+                    listView2.Items.Insert(0, lvi); 
             }));
         }
 
@@ -274,8 +264,11 @@ namespace xCsdn
             string sta = "";
             if ((sta=cdh.Login()).Contains("成功"))
             {
-                userColor.Add(cdh .NickName ,GetRandomColor ());
-                listCsdnH.Add(cdh);
+                if (!userColor.ContainsKey(cdh.NickName))
+                {
+                    userColor.Add(cdh.NickName, GetRandomColor());
+                    listCsdnH.Add(cdh);
+                }
                 //cdh.Command();
                 this.Invoke(new Action(() => {
                 
@@ -338,7 +331,11 @@ namespace xCsdn
         }
         private void FormPub_FormClosing(object sender, FormClosingEventArgs e)
         {
-            foreach (CsdnHelper item in listCsdnH )
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                return;
+            }
+            foreach (CsdnHelper item in listCsdnH)
             {
                 item.Clear();
             }
@@ -347,7 +344,7 @@ namespace xCsdn
                 BinaryFormatter bf = new BinaryFormatter();
                 using (FileStream fs = new FileStream(Application.StartupPath + @"\userinfos.cfg", FileMode.Create, FileAccess.Write))
                 {
-                    bf.Serialize(fs,users );
+                    bf.Serialize(fs, users);
                 }
             }
         }
@@ -470,38 +467,6 @@ namespace xCsdn
                 Tsleep(800);
             }
         }
-
-        private void 全部登录ToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            for (int i = 0; i < listView1 .Items.Count ; i++)
-            {
-                string name = listView1.Items [i].SubItems[1].Text ;
-                string pass = listView1.Items [i].SubItems[2].Text;
-                LoginTest(name, pass, i);
-                if (i + 1 < listView1.Items.Count)
-                {
-                    Tsleep(800);
-                }
-            }
-        }
-
-        private void 已登录评分ToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            foreach (CsdnHelper item in listCsdnH )
-            {
-                item.Command();
-            }
-        }
-
-        private void 已登录下载ToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            foreach (CsdnHelper item in listCsdnH)
-            {
-                item.TimeForDown = 3000;
-                item.DownloadFree();
-            }
-        }
-
         private void 终止所有用户行为ToolStripMenuItem_Click(object sender, EventArgs e)
         {
             foreach (CsdnHelper item in listCsdnH)
@@ -591,12 +556,7 @@ namespace xCsdn
                     continue;
                 }
                 list_uped.AddRange(item.GetUploadRs());
-
-                //FormSetting fset = new FormSetting(item);
-                //fset.ShowDialog();
-                //Tsleep(800);
             }
-            // Console.WriteLine(list_uped .Count .ToString ());
         }
 
         private void 下载上传的资源ToolStripMenuItem_Click(object sender, EventArgs e)
@@ -633,36 +593,6 @@ namespace xCsdn
         }
 
 
-
-        private void 自动刷分ToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (listView1.SelectedItems.Count == 0)
-            {
-                return;
-            }
-
-            List<int> indexs = new List<int>();
-            for (int j = 0; j < listView1.SelectedItems.Count; j++)
-            {
-                indexs.Add(listView1.SelectedItems[j].Index);
-            }
-            foreach (int index in indexs)
-            {
-                CsdnHelper item = (CsdnHelper)listView1.Items[index].Tag;
-                //CsdnHelper item = (CsdnHelper)listView1.Items[i].Tag;
-                if (item == null)
-                {
-                    showlogs(DateTime.Now.ToString("HHmmssffff") + "\t操作出错\t该账户尚未登录");
-                    continue;
-                }
-                //item.DownloadFree(list_uped);
-                item.Clear();
-                item.AutoRunTocheck("yqmacCSDN",200);
-                Tsleep(80);
-            }
-        }
-
-
         #endregion 工具bar
 
 
@@ -676,6 +606,7 @@ namespace xCsdn
                 Application.DoEvents();
             }
         }
+
         public void dealRegcsdn(string[] str,CsdnHelper cs=null )
         {
             if (str != null)
@@ -713,6 +644,8 @@ namespace xCsdn
             ctmp.AutoRunTocheck(regPass, 1);
             //ctmp = null;
         }
+
+
         List<CsdnResouce> list_uped = new List<CsdnResouce>();
       
         private void exportUsers()
@@ -721,12 +654,9 @@ namespace xCsdn
             foreach (KeyValuePair<string, string> item in users)
             {
                 strBuf.Append(string.Format("{0}----{1}\r\n", item.Key, item.Value));
-
             }
             File.AppendAllText(Application.StartupPath + @"\Users" + DateTime.Now.ToString("yyyyMMddHHmmssffff") + @".txt", strBuf.ToString());
         }
-
-
 
 
         private void importUsers(string file)
@@ -853,9 +783,121 @@ namespace xCsdn
             }
         }
 
+        private void 上传ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (listView1.SelectedItems.Count == 0)
+            {
+                return;
+            }
 
+            List<int> indexs = new List<int>();
+            for (int j = 0; j < listView1.SelectedItems.Count; j++)
+            {
+                indexs.Add(listView1.SelectedItems[j].Index);
+            }
+            foreach (int index in indexs)
+            {
+                CsdnHelper item = (CsdnHelper)listView1.Items[index].Tag;
+                //CsdnHelper item = (CsdnHelper)listView1.Items[i].Tag;
+                if (item == null)
+                {
+                    showlogs(DateTime.Now.ToString("HHmmssffff") + "\t操作出错\t该账户尚未登录");
+                    continue;
+                }
+                item.Upload();
+                //item.DownloadFree(list_uped);
+                //item.Clear();
+                //item.AutoRunTocheck("yqmacCSDN", 200);
+                Tsleep(80);
+            }
+        }
 
+        private void 全部通知ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (listView1.SelectedItems.Count == 0)
+            {
+                return;
+            }
 
+            List<int> indexs = new List<int>();
+            for (int j = 0; j < listView1.SelectedItems.Count; j++)
+            {
+                indexs.Add(listView1.SelectedItems[j].Index);
+            }
+            foreach (int index in indexs)
+            {
+                CsdnHelper item = (CsdnHelper)listView1.Items[index].Tag;
+                //CsdnHelper item = (CsdnHelper)listView1.Items[i].Tag;
+                if (item == null)
+                {
+                    showlogs(DateTime.Now.ToString("HHmmssffff") + "\t操作出错\t该账户尚未登录");
+                    continue;
+                }
+                item.GetMsg ();
+                //item.DownloadFree(list_uped);
+                //item.Clear();
+                //item.AutoRunTocheck("yqmacCSDN", 200);
+                Tsleep(80);
+            }
+        }
 
+        private void listView1_DoubleClick(object sender, EventArgs e)
+        {
+            if (listView1.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            List<int> indexs = new List<int>();
+            for (int j = 0; j < listView1.SelectedItems.Count; j++)
+            {
+                indexs.Add(listView1.SelectedItems[j].Index);
+            }
+
+            string user = listView1.SelectedItems[0].SubItems[1].Text;
+            Clipboard.SetText(user );
+            MessageBox.Show(user );
+            return;
+        }
+
+        private void 检查用户状态ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (listView1.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            List<int> indexs = new List<int>();
+            for (int j = 0; j < listView1.SelectedItems.Count; j++)
+            {
+                indexs.Add(listView1.SelectedItems[j].Index);
+            }
+            foreach (int index in indexs)
+            {
+                CsdnHelper item = (CsdnHelper)listView1.Items[index].Tag;
+                //CsdnHelper item = (CsdnHelper)listView1.Items[i].Tag;
+                if (item == null)
+                {
+                    showlogs(DateTime.Now.ToString("HHmmssffff") + "\t操作出错\t该账户尚未登录");
+                    continue;
+                }
+                string status=item.GetStatus();
+                if (listView1 .Items [index ].SubItems .Count == 4)
+                {
+                    listView1.Items[index].SubItems.Add(status );
+                }
+                else
+                {
+                    listView1.Items[index].SubItems[4].Text =status;
+                }
+                //item.DownloadFree(list_uped);
+                //item.Clear();
+                //item.AutoRunTocheck("yqmacCSDN", 200);
+                Tsleep(80);
+            }
+
+        }
+
+ 
     }
 }

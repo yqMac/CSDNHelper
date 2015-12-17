@@ -16,6 +16,10 @@ namespace xCsdn
     /// </summary>
     public  class CsdnHelper
     {
+        public CsdnHelper()
+        {
+            cc = new CookieContainer();
+        }
         #region 变量
         Random ran = new Random();
         Object LockObject = new object();
@@ -72,18 +76,9 @@ namespace xCsdn
             set { jfCount = value; }
         }
 
-
-
         private CookieContainer cc;
-        private HttpHelpers helper_down;
-        private HttpItems items_down;
         private HttpResults hr_down;
-
-       // private CookieContainer cc;
-        private HttpHelpers helper_com;
-        private HttpItems items_com;
         private HttpResults hr_com;
-
 
         private List<CsdnResouce> listConSource = new List<CsdnResouce>();
 
@@ -194,53 +189,330 @@ namespace xCsdn
 
         private List<CsdnResouce> uploadedRS = new List<CsdnResouce>();
 
-        bool conload = true;
 
-        bool isInAuto = false;
+        private string proxyIp = "";
+
         #endregion 变量
+
+        #region 上传随机文件
+        /// <summary>
+        /// 根据规则创建字符串
+        /// </summary>
+        /// <returns></returns>
+        private  string getRandomString(int lenth)
+        {
+            if (lenth <= 0)
+            {
+                return "";
+            }
+            StringBuilder  name =new StringBuilder ();
+            string a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            string b = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+            name.Append (a[ran.Next(a.Length)]);
+            //随机文本
+            for (int i = 0; i < lenth - 1; i++)
+            {
+                name.Append(b[ran.Next(b.Length)]);
+            }
+            //合成
+            return name.ToString ();
+        }
+
+        private  void upload(string filepath,string proxyip="")
+        {
+            string filename = Path.GetFileName(filepath);
+
+            //获取APC_UPLOAD_PROGRESS
+            HttpResults hr_up;
+            string rehtml;
+            string progress, param1;
+            string cookiess = new XJHTTP().CookieTostring(cc);
+
+            hr_up = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = @"http://u.download.csdn.net/upload",
+                Cookie = cookiess
+            }, ref cookiess);
+            rehtml = hr_up.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+
+            //id="progress_key"value="fdfa65ddb300eaceb54cd1ef425be4cd"
+            Regex reg = new Regex("id=\"progress_key\"value=\"(.*?)\"");
+            Match mct = reg.Match(rehtml);
+            //string s=mct.Groups[1].Value;
+            //progress_key" value="
+            progress = mct.Groups[1].Value;
+            // cookiess += ";dc_session_id="+new XJHTTP ().GetTimeByJs ()+";tos=36;";
+            CHECKVCODE:
+
+            //获取验证码
+            hr_up = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = @"http://u.download.csdn.net/index.php/rest/tools/validcode/uploadvalidcode/10.94257339" + new Random().Next().ToString(),
+                Referer = "http://u.download.csdn.net/upload",
+                Cookie = cookiess,
+                ResultType = ResultType.Byte
+
+            }, ref cookiess);
+            byte[] imgbytes = hr_up.ResultByte;
+            string code = getImgVcode(imgbytes);
+            if (code == "")
+            {
+                return;
+            }
+
+            //检查验证码
+            hr_up = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = "http://u.download.csdn.net/index.php/upload/checkform/txt_validcode=" + code,
+                Cookie = cookiess,
+                Referer = "http://u.download.csdn.net/upload"
+            }, ref cookiess);
+            rehtml = hr_up.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+
+            if (rehtml != "{\"succ\":1}")
+            {
+                rehtml = new XJHTTP().FromUnicodeString(rehtml);
+                goto CHECKVCODE;
+            }
+            //上传
+            string bundry = "WebKitFormBoundary" + getRandomString(16);
+
+            StringBuilder strb = new StringBuilder();
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"APC_UPLOAD_PROGRESS\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append(progress).Append("\r\n");
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"txt_userfile\"; filename=\"" + filename + "\"").Append("\r\n");
+            strb.Append("Content-Type: application/octet-stream").Append("\r\n");
+            strb.Append("").Append("\r\n");
+
+            string headerstr = strb.ToString();
+            strb.Clear();
+
+
+            strb.Append("\r\n------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"txt_title\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("课程资源_"+filename.Substring (1,5) + "_名称").Append("\r\n");
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"sel_filetype\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("1").Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"txt_tag\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append(filename .Substring (0,filename .Length >5?5:filename .Length )).Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"sel_primary\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("15").Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"sel_subclass\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("15013").Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"sel_score\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("0").Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"txt_desc\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append(filename + "资源，需要的下载吧,课程内容进度的保存等" ).Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"txt_validcode\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append(code).Append("\r\n");//改
+
+            strb.Append("------" + bundry).Append("\r\n");
+            strb.Append("Content-Disposition: form-data; name=\"cb_agree\"").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("").Append("\r\n");
+            strb.Append("------" + bundry).Append("--");
+            //string headerstr = strb.ToString();
+            string tailstr = strb.ToString();
+
+            byte[] heaerbytes = Encoding.ASCII.GetBytes(headerstr);
+            byte[] bodybytes = File.ReadAllBytes(filepath);
+            byte[] tailbytes = Encoding.ASCII.GetBytes(tailstr);
+
+            byte[] pstdata = ComposeArrays(ComposeArrays(heaerbytes, bodybytes), tailbytes);
+
+
+            //items_down.Header.Add("Content-Length:"+pstdata .Length );
+            hr_up = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = "http://u.download.csdn.net/upload/do_upload",
+                Cookie = cookiess,
+                Referer = "http://u.download.csdn.net/upload",
+                Method = "post",
+                PostDataType = PostDataType.Byte,
+                PostdataByte = pstdata,
+                Accept = "Accept-Encoding: gzip, deflate",
+
+                ContentType = "multipart/form-data; boundary=----" + bundry,
+                ProxyIp =proxyip 
+                
+            }, ref cookiess);
+
+
+            rehtml = hr_up.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+            if (!rehtml.Contains("uploadkey"))
+            {
+                //{"succ":0,"errmsg":"\u8bf7\u586b\u5199\u8d44\u6e90\u7684\u6807\u9898!"}
+                //{"succ":1,"errmsg":"","uploadkey":"e6a58597b7fd882ff67fe192de62dee8"}
+                rehtml = new XJHTTP().FromUnicodeString(rehtml);
+                string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
+                status[0] = "上传文件";
+                status[1] = "失败";
+                status[2] = filename;
+                status[3] = code;
+                status[4] = rehtml;
+                Logscomsole(status);
+            }
+            else
+            {
+                string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
+                status[0] = "上传文件";
+                status[1] = "成功";
+                status[2] = filename;
+                status[3] = code;
+                status[4] = "";
+                Logscomsole(status);
+            }
+        }
+
+        #endregion 上传随机文件
+
+
+        public byte[] ComposeArrays(byte[] Array1, byte[] Array2)
+        {
+            byte[] Temp = new byte[Array1.Length + Array2.Length];
+            Array1.CopyTo(Temp, 0);
+            Array2.CopyTo(Temp, Array1.Length);
+            return Temp;
+        }
+
 
 
         #region 公开
 
-
-
-        public CsdnHelper()
+        /// <summary>
+        /// 帐号是否被锁定
+        /// </summary>
+        public string  GetStatus()
         {
-            cc = new CookieContainer();
-            helper_down = new HttpHelpers();
-            helper_com = new HttpHelpers();
+            //http://u.download.csdn.net/upload
+            //您因违反CSDN下载频道规则而被锁定帐户
+            hr_down = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = "http://u.download.csdn.net/upload",
+                Container = cc
+            });
+            string rehtml = hr_down.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+            if (rehtml.Contains("您因违反CSDN下载频道规则而被锁定帐户"))
+            {
+                Logscomsole(new string[]  { "检查状态", "失败喽，锁定了", rehtml, "", "" } );
+                return "锁定";
+            }else
+            {
+                Logscomsole(new string[] { "检查状态", "成功，尚未", rehtml, "", "" });
+                return "正常";
+            }
         }
 
+       /// <summary>
+       /// 获取通知
+       /// </summary>
+        public void GetMsg()
+        {
+            hr_down = new HttpHelpers().GetHtml(new HttpItems() {
+                URL = "http://msg.csdn.net/",
+                Container =cc 
+            });
+            string rehtml = hr_down.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+            if (rehtml != "")
+            {
+                //很遗憾，您上传的资源hosts修改工具因资源违规没有通过审核
+                string restr = "很遗憾，您上传的资源(.*?)没有通过审核";
+                Regex reg = new Regex(restr );
+                MatchCollection mct = reg.Matches(rehtml);
+                if (mct.Count > 0)
+                {
+                    Logscomsole(new string[] { "检查通知", "失败，有错喽", mct.Count.ToString(), mct[0].Groups[1].Value.ToString(), "" });
+                }
+            }
+        }
+
+        /// <summary>
+        /// 上传
+        /// </summary>
+        /// <param name="dir"></param>
+        public void Upload(string dir="")
+        {
+
+            string name="";
+            string contents="";
+            string filename="";
+            string pass = "";
+            if (dir == "")
+            {
+                name = getRandomString(6) + DateTime.Now.ToString("ffff");
+                contents = getRandomString(600) + "\r\n" + DateTime.Now.ToString("yyyyMMddHHmmssffff");
+                filename = Environment.CurrentDirectory + "\\" + name;
+                File.WriteAllText(filename+".txt", contents);
+                pass = getRandomString(5);
+                yq.ZipHelper.ZipFile(filename+".txt" ,filename +"解压密码"+pass +".zip",pass );
+                filename = filename + "解压密码" + pass + ".zip";
+            }
+            else
+            {
+                filename = dir;
+            }
+    
+            if(File.Exists (filename ))
+                upload(filename);
+            //upload(filename, "183.95.81.100:80");
+            if(File.Exists (filename)&& dir=="")
+            {
+                File.Delete(filename);
+            }
+        }
+
+
+        /// <summary>
+        /// 登录
+        /// </summary>
+        /// <returns></returns>
         public string Login()
         {
             string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
 
             if (User == "" || Pass == "")
             {
-                status[0] = "模拟登录";
-                status[1] = "失败";
-                status[2] = "帐号或者密码有误";
-                status[3] = "";
-                status[4] = "";
-                Logscomsole(status);
+                Logscomsole(new string[] { "模拟登录", "失败", "帐号或者密码有误", "", "" });
                 return "";
             }
-            status[0] = "模拟登录";
-            status[1] = "开始";
-            status[2] = "";
-            status[3] = "";
-            status[4] = "";
             //Logscomsole(status);
 
             string reText = "";
             string url = "https://passport.csdn.net/account/login";//请求地址
             string loginUrl = "https://passport.csdn.net/account/login";
             reText = string.Empty;//请求结果,请求类型不是图片时有效   
-            items_down = new HttpItems();
-            items_down.URL = url;//设置请求地址
-            items_down.Container = cc;//自动处理Cookie时,每次提交时对cc赋值即可
-            //helper_down = new HttpHelpers();
-            hr_down = helper_down.GetHtml(items_down);//发起请求并得到结果
+            hr_down = new HttpHelpers ().GetHtml(new HttpItems() {
+                URL=url ,
+                Container =cc 
+            });//发起请求并得到结果
             reText = hr_down.Html;//得到请求结果
             if (!string.IsNullOrEmpty(reText) && !reText.Equals("请求被中止: 连接被意外关闭。"))
             {
@@ -248,8 +520,6 @@ namespace xCsdn
                 //内部变量
                 string lt = string.Empty, execution = string.Empty, eventId = string.Empty;
                 //匹配必须参数
-                //-lt-
-               
 
                 Regex reg = new Regex("userId\":(.*?),\"isLocked\"");
                 MatchCollection mc = reg.Matches(reText);
@@ -266,20 +536,20 @@ namespace xCsdn
                  }
                 lt = mc[0].Groups[1].Value;
                 //-execution-
-                Regex reg2 = new Regex("name=\"execution\" value=\"(.+?)\"");
-                MatchCollection mc2 = reg2.Matches(reText);
+                MatchCollection mc2 = new Regex ("name=\"execution\" value=\"(.+?)\"").Matches(reText);
                 execution = mc2[0].Groups[1].Value;
                 //-eventId-
-                Regex reg3 = new Regex("name=\"_eventId\" value=\"(.+?)\"");
-                MatchCollection mc3 = reg3.Matches(reText);
+                MatchCollection mc3 = new Regex("name=\"_eventId\" value=\"(.+?)\"").Matches(reText);
                 eventId = mc3[0].Groups[1].Value;
 
-                items_down = new HttpItems();
-                items_down.URL = loginUrl;
-                items_down.Container = cc;
-                items_down.Method = "POST";
-                items_down.Postdata = string.Format("username={0}&password={1}&lt={2}&execution={3}&_eventId={4}", user, pass, lt, execution, eventId);
-                hr_down = helper_down.GetHtml(items_down);
+                hr_down = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = loginUrl,
+                    Container = cc,
+                    Method = "post",
+                    Postdata = string.Format("username={0}&password={1}&lt={2}&execution={3}&_eventId={4}", user, pass, lt, execution, eventId)
+                });
+
                 reText = hr_down.Html;
                 //检查是否登录成功
                 Regex regerro = new Regex("<span id=\"error-message\">(.+?)</span>");
@@ -288,13 +558,7 @@ namespace xCsdn
                 if (mcerro.Count > 0)
                 {
                     reText = mcerro[0].Groups[1].Value;
-                    status[0] = "模拟登录";
-                    status[1] = "失败";
-                    status[2] = reText;
-                    status[3] = "";
-                    status[4] = "";
-                    //Logscomsole(status);
-                    Logscomsole(status);
+                    Logscomsole(new string[] { "模拟登录", "失败", reText, "", "" });
                     isonline = false;
                 }
                 else
@@ -303,29 +567,14 @@ namespace xCsdn
                     {
                         reText = reText.Replace("\r\n", "").Replace("\n", "").Replace("\t", "");
                         NickName = getPater(reText, "var data = {", "};", new char[] { ',' }, new char[] { ':', '\"' })["nickName"];
-
-
-                        // NickName =loginInfos [95];
                         reText = "登录成功";
-
-                        status[0] = "模拟登录";
-                        status[1] = "成功";
-                        status[2] = "昵称：" + NickName;
-                        status[3] = "";
-                        status[4] = "";
-                        Logscomsole(status);
-
+                        Logscomsole(new string[] { "模拟登录","成功", "昵称：" + NickName ,"",""});
                         isonline = true;
                     }
                     else
                     {
                         reText = "登录失败,账号已失效！";
-                        status[0] = "模拟登录";
-                        status[1] = "失败";
-                        status[2] = reText;
-                        status[3] = "";
-                        status[4] = "";
-                        Logscomsole(status);
+                        Logscomsole(new string[] { "模拟登录","失败",reText ,"","" });
                         isonline = false;
                     }
                 }
@@ -335,38 +584,19 @@ namespace xCsdn
         }
 
 
+        /// <summary>
+        /// 评论已下载资源
+        /// </summary>
         public void Command()
         {
-            string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-            status[0] = "自动评分";
-            status[1] = "开始";
-            status[2] = "";
-            status[3] = "";
-            status[4] = "";
-            //Logscomsole(status);
-
-
             if (!Isonline)
             {
-                status[0] = "自动评分";
-                status[1] = "失败";
-                status[2] = "未登录呢";
-                status[3] = "";
-                status[4] = "";
-                Logscomsole(status);
-                //Logscomsole("自动评分", "失败", "未登录呢");
+                Logscomsole(new string[] { "自动评分","失败","未登录呢","",""});
                 return;
             }
             if (comMsg==null||comMsg.Length == 0)
             {
-                status[0] = "自动评分";
-                status[1] = "失败";
-                status[2] = "语句库[comMsg]是空的";
-                status[3] = "";
-                status[4] = "";
-                Logscomsole(status);
-                //Console.WriteLine("语句库[comMsg]是空的");
-                //Logscomsole("自动评分", "失败", "语句库[comMsg]是空的");
+                Logscomsole(new string[] { "自动评分", "失败", "语句库[comMsg]是空的", "", "" });
                 return;
             }
             if (thread_com != null && thread_com.IsAlive)
@@ -378,17 +608,15 @@ namespace xCsdn
 
         }
 
-
+        /// <summary>
+        /// 下载免费资源
+        /// </summary>
+        /// <param name="list"></param>
         public void DownloadFree(List <CsdnResouce >list=null )
         {
             if (list != null&&list .Count >0)
             {
                 ListPreTDown = list;
-                conload = false;
-            }
-            else
-            {
-                conload = true;
             }
             if (thread_down != null && thread_down.IsAlive)
             {
@@ -398,37 +626,20 @@ namespace xCsdn
             thread_down.Start();
         }
 
-
+        /// <summary>
+        /// 终止所有行为
+        /// </summary>
         public void Clear()
         {
-            string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-            status[0] = "自动评分";
-            status[1] = "开始";
-            status[2] = "";
-            status[3] = "";
-            status[4] = "";
-            //Logscomsole(status);
             if (thread_com != null && thread_com.IsAlive)
-            {
-                status[0] = "自动模拟评分";
-                status[1] = "结束";
-                status[2] = "被强制终止";
-                status[3] = "";
-                status[4] = "";
-                Logscomsole(status);
-                //Logscomsole("自动模拟评分", "结束", "被强制终止");
+            { 
+                Logscomsole(new string[] { "自动模拟评分","结束", "被强制终止","","" });
                 thread_com.Abort();
                 thread_com = null;
             }
             if (thread_down != null && thread_down.IsAlive)
             {
-                status[0] = "自动模拟下载";
-                status[1] = "结束";
-                status[2] = "被强制终止";
-                status[3] = "";
-                status[4] = "";
-                Logscomsole(status);
-                //Logscomsole("自动模拟下载", "结束", "被强制终止");
+                Logscomsole(new string[] { "自动模拟下载", "结束", "被强制终止", "", "" });
                 thread_down.Abort();
                 thread_down = null;
             }
@@ -436,24 +647,29 @@ namespace xCsdn
             listPreTDown = new List<CsdnResouce>();
         }
 
-
+        /// <summary>
+        /// 获取已上传资源
+        /// </summary>
+        /// <returns></returns>
         public List<CsdnResouce> GetUploadRs()
         {
             getUploadRs();
             return uploadedRS;
         }
 
-
-
         private string mima = "";
         private int pointNum = -1;
         private int finishNum = 0;
 
-        public void AutoRunTocheck(string mima,int pointnum) {
-            isInAuto = true;
+        /// <summary>
+        /// 注册
+        /// </summary>
+        /// <param name="mima"></param>
+        /// <param name="regNum">注册个数，间隔时间5分钟</param>
+        public void AutoRunTocheck(string mima,int regNum) {
             this.mima = mima;
             this.Pass  = mima;
-            this.pointNum = pointnum;
+            this.pointNum = regNum;
             new Thread(new ThreadStart (auto )).Start ();
 
         }
@@ -461,107 +677,23 @@ namespace xCsdn
 
         #endregion 公开
 
-        #region 自动化程序
-        public void auto()
-        {
-            try
-            {
-                int trytimes = 0;
-
-            Start:
-
-                if (string.IsNullOrEmpty(this.User))
-                {
-                    string[] regre = regForIn();
-                    if (regre.Length == 2)
-                    {
-                        finishNum++;
-                        this.User = regre[0];
-                        this.Pass = regre[1];
-                    }
-
-                    if (regeristResult != null)
-                    {
-                        regeristResult(regre, this);
-                    }
-                    //注册失败
-                    if (regre.Length != 2)
-                    {
-                        return;
-                    }
-              
-                    File.AppendAllText(Environment.CurrentDirectory + @"\users.txt", string.Format("{0}----{1}\r\n", this.User, this.Pass));
-
-                    if (finishNum < pointNum)
-                    {
-                        Thread.Sleep(1000 * 60 * 5);
-                        this.User = "";
-                        goto Start;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                yq.LogHelper.Error(ex );
-                //throw;
-            }
-            
-            
-            //if (!isonline &&!this.Login().Contains("成功"))
-            //{
-            //    if (trytimes < 3)
-            //    {
-            //        trytimes++;
-            //        goto Start;
-            //    }
-            //    else
-            //    {
-            //        this.User = string.Empty;
-            //        trytimes = 0;
-            //        goto  Start;
-
-            //    }
-            //}
-            //getInfo();
-            //pointNum =pointNum == -1 ? 200 : pointNum;
-            //if (JfCount >=pointNum )
-            //{
-            //    File.AppendAllText(Environment.CurrentDirectory + @"\usersFinish.txt", string.Format("{0}----{1}----{2}\r\n", this.User, this.Pass,JfCount .ToString ()));
-            //    return;
-            //}
-            //if (DowCount < pointNum)
-            //{
-            //    getdownlist();
-
-            //    DownloadFree();
-            //}
-            //Command();
-        }
-
-
-        #endregion 自动化程序
-
-
-
-
-
         #region 获取上传资源
         private void getUploadRs()
         {
-            string[] status = { "操作", "成功/失败", "无验证码", "状态", "无附加信息" };
-            status[0] = "获取上传资源";
-            status[2] = "";
-            status[3] = "";
-            status[4] = "";
             // Logscomsole(status);
-
             HttpHelpers helper_up = new HttpHelpers();
             HttpItems items_up = new HttpItems();
             HttpResults hr_up = new HttpResults();
+            string url;
+            string rehtml;
+            
 
-            items_up = new HttpItems();
-            items_up.URL = "http://download.csdn.net/my";
-            items_up.Container = cc;
+
+            url =string.Format ("http://download.csdn.net/my");
+            items_up = new HttpItems() {
+                URL = url,
+                Container = cc 
+            };
             hr_up = helper_up.GetHtml(items_up);
             string DownHtml = hr_up.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
             string result = Regex.Replace(DownHtml, @"<!--(.+?)-->", "");
@@ -598,16 +730,9 @@ namespace xCsdn
                     //CsdnResouce cdsr = new CsdnResouce(tmp1[6], tmp1[4]);
                     cdsr.Tag = String.Format("http://download.csdn.net{0}", cdsr.Url);
                     uploadedRS.Add(cdsr );
-                }
-
-            
+                }      
             }
-
-            status[0] = "获取上传资源";
-            status[1] = "结束";
-            status[2] = "共 "+upCount .ToString ()+" 个资源";
-            status[3] = "";
-            Logscomsole(status);
+            Logscomsole(new string[] { "获取上传资源", "结束", "共 " + upCount.ToString() + " 个资源", "", "" });
         }
 
 
@@ -616,11 +741,51 @@ namespace xCsdn
 
         #region 注册
 
-        public void Reger()
+
+        public void auto()
         {
-            new Thread(new ThreadStart(reg)).Start();
+            try
+            {
+                int trytimes = 0;
+                Start:
+                if (string.IsNullOrEmpty(this.User))
+                {
+                    string[] regre = regForIn();
+                    if (regre.Length == 2)
+                    {
+                        finishNum++;
+                        this.User = regre[0];
+                        this.Pass = regre[1];
+                    }
+                    if (regeristResult != null)
+                    {
+                        regeristResult(regre, this);
+                    }
+                    //注册失败
+                    if (regre.Length != 2)
+                    {
+                        return;
+                    }
+                    File.AppendAllText(Environment.CurrentDirectory + @"\users.txt", string.Format("{0}----{1}\r\n", this.User, this.Pass));
+                    if (finishNum < pointNum)
+                    {
+                        Thread.Sleep(1000 * 60 * 10);
+                        this.User = "";
+                        goto Start;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                yq.LogHelper.Error(ex);
+                //throw;
+            }
+
+
         }
 
+
+        #region 邮件
 
         /// <summary>
         /// .net
@@ -632,12 +797,14 @@ namespace xCsdn
             HttpItems item = new HttpItems();
             HttpHelpers heler = new HttpHelpers();
             HttpResults hr = new HttpResults();
+            string url;
 
-            item = new HttpItems();
-            //https://10minutemail.net/
-            item.URL = @"https://10minutemail.net/";
-            item.Container = ccc ;
-
+            url = @"https://10minutemail.net/";
+            item = new HttpItems()
+            {
+                URL = url ,
+                Container =ccc
+            };
             hr = heler.GetHtml(item);
             Regex regex = new Regex("ata-clipboard-text=\".*?\"");
             MatchCollection mc = regex.Matches(hr.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", ""));
@@ -911,7 +1078,7 @@ namespace xCsdn
         {
             string reText = "";
             string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-            Thread.Sleep(5000);
+            Thread.Sleep(15000);
             HttpItems item = new HttpItems();
             HttpHelpers heler = new HttpHelpers();
             HttpResults hr = new HttpResults();
@@ -954,15 +1121,13 @@ namespace xCsdn
                 item.Allowautoredirect = true;
                 hr = heler.GetHtml(item);
                 emalurl = hr.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", "");
-                // Console.WriteLine(emalurl);
-                //action=userInfoView
-                //regex = new Regex("CSDN各项服务。<br/><br/> https(.*?)<br/>");
 
                 regex = new Regex("https://passport.csdn.net(.*?)action=userInfoView");
                 mc = regex.Matches(emalurl);
                 if (mc != null && mc.Count > 0)
                 {
                     string urlacc = mc[0].Groups[0].Value.Replace("&amp;", "&");
+                    return urlacc;
                     //string urlacc = mc[0].Groups[0].Value.Split(new char[] { '\"' })[1]; ;
                     item = new HttpItems();
                     item.URL = urlacc;
@@ -984,12 +1149,12 @@ namespace xCsdn
             return "注册失败";
         }
 
+        #endregion 邮件
 
-
-
-        private string[] regForIn()
+        private string[] regForIn(string proxyip="")
         {
-            Start:
+            Start:      
+            //string proxyip = "";
             int trytimes = 0;
             string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
             status[0] = "注册帐号";
@@ -1014,12 +1179,15 @@ namespace xCsdn
             string name = "";
             string regCode = "";
 
-            items_reg = new HttpItems();
+          
             //https://passport.csdn.net/ajax/verifyhandler.ashx//验证码
-            items_reg.URL = @"https://passport.csdn.net/ajax/verifyhandler.ashx";
-            items_reg.ResultType = ResultType.Byte;
-            items_reg.Container = cc_reg;
-            hr_reg = heler_reg.GetHtml(items_reg);
+            hr_reg = heler_reg.GetHtml(new HttpItems()
+            {
+                URL = @"https://passport.csdn.net/ajax/verifyhandler.ashx",
+                ResultType = ResultType.Byte,
+                Container = cc_reg
+            });
+
             regCodebytes = hr_reg.ResultByte;
 
             if (getRegVcode != null)
@@ -1039,9 +1207,10 @@ namespace xCsdn
             }
             //检查验证码
             //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-            items_reg = new HttpItems();
-            items_reg.URL = "http://passport.csdn.net/account/register?action=validateCode&validateCode=" + regCode;
-            items_reg.Container = cc_reg;
+            items_reg = new HttpItems() {
+                URL= "http://passport.csdn.net/account/register?action=validateCode&validateCode=" + regCode,
+                Container =cc_reg 
+            };
             hr_reg = heler_reg.GetHtml(items_reg);
             if (hr_reg.Html.ToLower() != "true")
             {
@@ -1067,31 +1236,22 @@ namespace xCsdn
             email = getRegEmail2(cc_em);
             //检查验证码
             //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-            items_reg = new HttpItems();
-            items_reg.URL = "http://passport.csdn.net/account/register?action=validateEmail&email=" + email;
-            items_reg.Container = cc_reg;
-            hr_reg = heler_reg.GetHtml(items_reg);
+
+            hr_reg = heler_reg.GetHtml(new HttpItems() {
+                URL = "http://passport.csdn.net/account/register?action=validateEmail&email=" + email,
+                Container =cc_reg 
+            });
             if (hr_reg.Html.ToLower() != "true")
             {
                 trytimes++;
                 if (trytimes < 5)
                 {
-                    status[0] = "注册帐号";
-                    status[1] = "失败";
-                    status[2] = "邮箱验证失败";
-                    status[3] = hr_reg.Html;
-                    status[4] = "";
-                    Logscomsole(status);
+                    Logscomsole(new string[] { "注册帐号", "失败", "邮箱验证失败", hr_reg.Html, "" });
                     goto GetMail;
                 }
                 else
                 {
-                    status[0] = "注册帐号";
-                    status[1] = "失败";
-                    status[2] = "邮箱验证失败次数过多";
-                    status[3] = hr_reg.Html;
-                    status[4] = "";
-                    Logscomsole(status);
+                    Logscomsole(new string[] { "注册帐号","失败", "邮箱验证失败次数过多",hr_reg .Html ,"" });
                     return new string[] { };
                 }
             }
@@ -1099,98 +1259,117 @@ namespace xCsdn
             GetregName:
             name = GetName();
             //检查名字
-            //http://passport.csdn.net/account/register?action=validateCode&validateCode=
-            items_reg = new HttpItems();
-            items_reg.URL = "http://passport.csdn.net/account/register?action=validateUsername&username=" + name;
-            items_reg.Container = cc_reg;
-            hr_reg = heler_reg.GetHtml(items_reg);
+            hr_reg = heler_reg.GetHtml(new HttpItems()
+            {
+                URL = "http://passport.csdn.net/account/register?action=validateUsername&username=" + name,
+                Container = cc_reg
+            });
             if (hr_reg.Html.ToLower() != "true")
             {
-
                 trytimes++;
                 if (trytimes < 5)
                 {
-                    status[0] = "注册帐号";
-                    status[1] = "失败";
-                    status[2] = "用户名验证失败";
-                    status[3] = hr_reg.Html;
-                    status[4] = "";
-                    Logscomsole(status);
+                    Logscomsole(new string[] { "注册帐号", "失败", "用户名验证失败", hr_reg.Html, "" });
                     goto GetregName;
                 }
                 else
                 {
-                    status[0] = "注册帐号";
-                    status[1] = "失败";
-                    status[2] = "用户名验证失败次数过多";
-                    status[3] = hr_reg.Html;
-                    status[4] = "";
-                    Logscomsole(status);
+                    Logscomsole(new string[] { "注册帐号", "失败", "用户名验证失败次数过多", hr_reg.Html, "" });
                     return new string[] { };
                 }
             }
             //string email = string.Format("{0}@qq.com", name);
             string pwd = string.IsNullOrEmpty(mima) ? "aa13655312932bb" : mima;
-
-            status[0] = "注册帐号";
-            status[1] = "进行中";
-            status[2] = "验证成功";
-            status[3] = "用户名：" + name;
-            status[4] = "邮箱：" + email;
-            Logscomsole(status);
+            Logscomsole(new string[] { "注册帐号", "进行中", "验证成功", "用户名：" + name, "邮箱：" + email });
             PostRequest:
 
             #region 提交注册请求
-            items_reg = new HttpItems();
-            string regurl = "https://passport.csdn.net/account/register?action=saveUser&isFrom=False";
-            string postdata = string.Format("fromUrl={0}&userName={1}&email={2}&password={3}&confirmpassword={4}&validateCode={5}&agree=on",
-                string.Empty, name, email, pwd, pwd, regCode);
-            items_reg.Container = cc_reg;
-            items_reg.URL = regurl;
-            items_reg.Postdata = postdata;
-            items_reg.Method = "POST";
-            hr_reg = heler_reg.GetHtml(items_reg);
+            
+            hr_reg = heler_reg.GetHtml(new HttpItems()
+            {
+                Container = cc_reg,
+                URL = "http://passport.csdn.net/account/register?action=saveUser&isFrom=False",
+                Postdata = string.Format("fromUrl={0}&userName={1}&email={2}&password={3}&confirmpassword={4}&validateCode={5}&agree=on",
+                string.Empty, name, email, pwd, pwd, regCode),         
+                Method = "POST",
+
+                ProxyIp = proxyip,
+            });
             int trycount = 0;
-            WaitForEmail:
+          WaitForEmail:
             trycount++;
             string html = hr_reg.Html.Replace("\r\n", "").Replace("\t", "").Replace("\n", "");
 
-            if (html.Contains("邮件已发送到邮箱"))
+            if (html.Contains("邮件已发送到邮箱")||html .Contains ("不允许在一分钟内重复发送激活邮件，请稍后"))
             {
-
-                status[0] = "注册帐号";
-                status[1] = "进行中";
-                status[2] = "激活邮件已发送";
-                status[3] = "等待邮件到达";
-                status[4] = "";
-                Logscomsole(status);
+                Logscomsole(new string[] {"注册帐号","进行中","激活邮件已发送", "等待邮件到达","" });
                 string str = "";
-                if ((str = activeRegEmai2(email, cc_em)).Contains("成功"))
+                if (!(str = activeRegEmai2(email, cc_em)).Contains("失败"))
                 {
-                    status[0] = "注册帐号";
-                    status[1] = "成功";
-                    status[2] = "帐号：" + name;
-                    status[3] = "密码：" + pwd;
-                    status[4] = "";
-                    Logscomsole(status);
-                    return new string[] { name, pwd };
+                    str = "http" + str.Substring(5);
+                    hr_reg = new HttpHelpers().GetHtml(new HttpItems() {
+                        URL =str.Replace ("https","http") ,
+                        ProxyIp =proxyip ,
+                        //Allowautoredirect =true 
+                    });
+
+                    hr_reg = new HttpHelpers().GetHtml(new HttpItems()
+                    {
+                        URL = str.Replace("https", "http"),
+                        ProxyIp = proxyip,
+                        //Allowautoredirect =true 
+                    });
+                    string htmlss = hr_reg.Html;
+                    if (htmlss.Contains("注册成功")||htmlss .Contains ("账户已经激活"))
+                    {
+                        status[0] = "注册帐号";
+                        status[1] = "成功";
+                        status[2] = "帐号：" + name;
+                        status[3] = "密码：" + pwd;
+                        status[4] = "";
+                        Logscomsole(status);
+                        return new string[] { name, pwd };
+                    }
+                    else
+                    {
+                        status[0] = "注册帐号";
+                        status[1] = "失败";
+                        status[2] = htmlss;
+                        status[3] = "";
+                        status[4] = "";
+                        Logscomsole(status);
+                        return new string[] { };
+                    }
                 }
                 else
                 {
 
-                    if (trycount < 10)
+                     if(trycount <7)
                     {
-                        status[0] = "注册帐号";
-                        status[1] = "进行中";
-                        status[2] = "重发邮件" + name;
-                        status[3] = "5秒后重新检测";
-                        status[4] = "";
-                        Logscomsole(status);
-                        HttpItems ittmp = new HttpItems()
+
+                        if (trycount % 5 == 0)
                         {
-                            URL = string.Format("http://passport.csdn.net/account/register?action=resendActiveEmail&username={0}", name)
-                        };
-                        hr_reg = new HttpHelpers().GetHtml(ittmp);
+                            status[0] = "注册帐号";
+                            status[1] = "进行中";
+                            status[2] = "重发邮件" + name;
+                            status[3] = "15秒后重新检测";
+                            status[4] = "";
+                            Logscomsole(status);
+                            hr_reg = new HttpHelpers().GetHtml(new HttpItems()
+                            {
+                                URL = string.Format("http://passport.csdn.net/account/register?action=resendActiveEmail&username={0}", name),
+                                ProxyIp =proxyip 
+                            });
+                        }
+                        else
+                        {
+                            status[0] = "注册帐号";
+                            status[1] = "进行中";
+                            status[2] = "等待激活邮件" + name;
+                            status[3] = "15秒后重新检测";
+                            status[4] = "";
+                            Logscomsole(status);
+                        }
                         goto WaitForEmail;
                     }
 
@@ -1248,13 +1427,6 @@ namespace xCsdn
             return new string[] { };
         }
 
-        private void  reg( )
-        {
-            if (regeristResult != null)
-            {
-                regeristResult(regForIn ());
-            }
-        }
 
         public string GetName()
         {
@@ -1269,17 +1441,23 @@ namespace xCsdn
             }
             return name;
         }
+
+
         #endregion 注册
 
 
 
-        double DowCount;
+        double DowCount=0;
+
         private bool getInfo()
         {
-            items_com = new HttpItems();
-            items_com.URL = "http://download.csdn.net/my/downloads";
-            items_com.Container = cc;
-            hr_com = helper_com.GetHtml(items_com);
+
+            hr_com = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = "http://download.csdn.net/my/downloads",
+                Container = cc
+            });
+
             string DownHtml = hr_com.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
             string result = Regex.Replace(DownHtml, @"<!--(.+?)-->", "");
             //获取下载资源数量
@@ -1303,47 +1481,24 @@ namespace xCsdn
 
         private void download()
         {
-            string[] status = { "操作", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-            status[0] = "批量模拟下载";
-            status[1] = "开始";
-            status[2] = "";
-            status[3] = "";
-            status[4] = "";
-
             if (ListPreTDown == null || ListPreTDown.Count == 0)
             {
-                //Logscomsole("获取免费资源", "开始", "随机扫描数据");
-               // getdownlist();
                 Logscomsole(getdownlist ());
-
             }
-            status[0] = "自动模拟下载";
-            status[1] = "开始";
-            status[2] = "开始执行";
-            status[3] = "";
-            status[4] = "";
-            Logscomsole(status );
+            Logscomsole(new string[] { "批量模拟下载", "开始" , "开始执行","","" } );
             foreach (CsdnResouce item in listPreTDown)
             {
                 item.Method = "模拟下载";
                 Logscomsole(downloadOne(item));
-                //Logscomsole("模拟下载暂停", "延时等待", (timeForDown / 1000).ToString() + "秒");
                 Thread.Sleep(TimeForDown);
             }
-            status[0] = "自动模拟下载";
-            status[1] = "结束";
-            status[2] = "执行完毕";
-            status[3] = "";
-            status[4] = "";
-            Logscomsole(status);
-            //Logscomsole("自动模拟下载", "结束", "执行完毕");
-            listPreTDown = new List<CsdnResouce>();
-            if (conload)
-            {
-                thread_down = new Thread(new ThreadStart(download));
-                thread_down.Start();
-            }
-            
+            Logscomsole(new string[] { "自动模拟下载", "结束", "执行完毕", "", "" });
+            //listPreTDown = new List<CsdnResouce>();
+            //if (conload)
+            //{
+            //    thread_down = new Thread(new ThreadStart(download));
+            //    thread_down.Start();
+            //} 
         }
 
         private string [] getdownlist()
@@ -1363,15 +1518,11 @@ namespace xCsdn
            // String szReg_res_down_forfree_url = ("<dt><ahref=\"(.+?)\">(.+?)</a><spanclass=\"marks\">0</span></dt>");
             //String szReg_res_down_per_url = ("action=\"(http://download.csdn.net/index.php/source/do_download/(.*?))\"");
 
-            string url = ("http://download.csdn.net/");
-
-            items_down = new HttpItems();
-            items_down.URL = url;
-            string result = helper_down.GetHtml(items_down).Html;
+            string result = new HttpHelpers().GetHtml(new HttpItems() { URL = "http://download.csdn.net/" }).Html;
             result = result.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
 
-            Regex reg = new Regex(szReg_res_url);
 
+            Regex reg = new Regex(szReg_res_url);
             MatchCollection mc = reg.Matches(result);
             List<string> strList = new List<string>();
 
@@ -1384,12 +1535,10 @@ namespace xCsdn
                 strList.Add(tmp);
             }
             int a = new Random().Next(strList.Count);
-            url = string.Format("http://download.csdn.net{0}", strList[a]);
-
-            items_down = new HttpItems();
-            items_down.URL = url;
-            result = helper_down.GetHtml(items_down).Html;
+    
+            result = new HttpHelpers().GetHtml(new HttpItems() { URL = string.Format("http://download.csdn.net{0}", strList[a]) }).Html;
             result = result.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
+
             reg = new Regex(szReg_res_url_pagecount);
             Match mat = reg.Match(result);
             string durl = mat .Groups[1].Value;
@@ -1401,10 +1550,11 @@ namespace xCsdn
 
             for (int j = 0; j < pageCount; j++)
             {
-                url = String.Format("http://download.csdn.net{0}/{1}", strList[a], j + 1);
-                items_down = new HttpItems();
-                items_down.URL = url;
-                result = helper_down.GetHtml(items_down).Html;
+                result = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = String.Format("http://download.csdn.net{0}/{1}", strList[a], j + 1)
+
+                }).Html;
                 result = result.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
                 reg = new Regex(szReg_res_down_url);
                 mc = reg.Matches(result);
@@ -1423,11 +1573,6 @@ namespace xCsdn
                         CsdnResouce cdsr = new CsdnResouce(namefor ,href );
                         cdsr.Tag = String.Format("http://download.csdn.net{0}", cdsr.Url);
                         ListPreTDown.Add(cdsr);
-                        if (pointNum != -1 && ListPreTDown.Count + DowCount >= pointNum)
-                        {
-                            conload = false;
-                            goto End;
-                        }
                     }
                 }
             }
@@ -1454,13 +1599,13 @@ namespace xCsdn
             status[3] = "";
             status[4] = "";
             //Logscomsole(status);
+            string url = cdrs.Tag.ToString().Replace("detail", "download");
+            string res = new HttpHelpers().GetHtml(new HttpItems()
+            {
+                URL = url ,
+                Container = cc
+            }).Html;
 
-            items_down = new HttpItems();
-            string url = string.Empty;
-            url = cdrs.Tag.ToString().Replace("detail", "download");
-            items_down.URL = url;
-            items_down.Container = cc;
-            string res = helper_down.GetHtml(items_down).Html;
             string taskName = "";
             string regexCode = "<meta name=\"description\" content=\"(.*?)\" />";
             Regex reg = new Regex(regexCode);
@@ -1472,14 +1617,15 @@ namespace xCsdn
                 string durl = reg.Match(res).Groups[1].Value;
                 // cdrs .Durl = durl;//下载地址
                 bool first = true;
-                items_down = new HttpItems();
-                items_down.URL = durl;
-                items_down.Referer = url;
-                items_down.Method = "Post";
-                items_down.Container = cc;
-                items_down.Allowautoredirect = true;
-                items_down.Postdata = "ds=&validate_code=&basic%5Breal_name%5D=&basic%5Bmobile%5D=&basic%5Bemail%5D=&basic%5Bjob%5D=&basic%5Bcompany%5D=&basic%5Bprovince%5D=&basic%5Bcity%5D=&basic%5Bindustry%5D=";
-                hr_down = helper_down.GetHtml(items_down);
+                hr_down = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = durl,
+                    Referer = url,
+                    Method = "Post",
+                    Container = cc,
+                    Allowautoredirect = true,
+                    Postdata = "ds=&validate_code=&basic%5Breal_name%5D=&basic%5Bmobile%5D=&basic%5Bemail%5D=&basic%5Bjob%5D=&basic%5Bcompany%5D=&basic%5Bprovince%5D=&basic%5Bcity%5D=&basic%5Bindustry%5D="
+                });
                 res = hr_down.Html;
             TRUEDOWNLOAD:
                 if (res.Contains("您因违反"))
@@ -1503,16 +1649,17 @@ namespace xCsdn
                             Directory.CreateDirectory(SavePath);
                         }
                         //href='http://dldx.csdn.net/fd.php?i=391492108198497&s=c936639a4ad2171ef2bee9ae9e706700';
-                        url = res.Substring(res.IndexOf("http"), res.LastIndexOf('\'') - res.IndexOf("http"));
-                        items_down = new HttpItems();
-                        items_down.URL = url;
-                        items_down.Referer = durl;
-                        items_down.Container = cc;
-                        items_down.ResultType = ResultType.Byte;
-                        items_down.Allowautoredirect = true;
+  
                         try
                         {
-                            hr_down = helper_down.GetHtml(items_down);
+                            hr_down = new HttpHelpers().GetHtml(new HttpItems()
+                            {
+                                URL = res.Substring(res.IndexOf("http"), res.LastIndexOf('\'') - res.IndexOf("http")),
+                                Referer = durl,
+                                Container = cc,
+                                ResultType = ResultType.Byte,
+                                Allowautoredirect = true
+                            });
                             //hr.ResultByte;  真实文件内容
                             byte[] bty = hr_down.ResultByte;
                             string a = hr_down.Header.Get("Content-Disposition");
@@ -1584,26 +1731,29 @@ namespace xCsdn
             while (tryTime < 5)
             {
                 tryTime++;
-                items_down = new HttpItems();
-                items_down.URL = @"http://download.csdn.net/index.php/rest/tools/validcode/source_ip_validate/10.1345321661792" + new Random().Next().ToString();
-                items_down.Referer = referurl;
-                items_down.Container = this.cc;
-                items_down.ResultType = ResultType.Byte;
-                HttpResults hr = helper_down.GetHtml(items_down);
+                HttpResults hr = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = @"http://download.csdn.net/index.php/rest/tools/validcode/source_ip_validate/10.1345321661792" + new Random().Next().ToString(),
+                    Referer = referurl,
+                    Container = this.cc,
+                    ResultType = ResultType.Byte
+
+                });
                 imgbytes = hr.ResultByte;
                 code = getImgVcode(imgbytes);
                 if (code == "")
                 {
                     continue;
                 }
-                items_down = new HttpItems();
-                items_down.URL = url;
-                items_down.Referer = referurl;
-                items_down.Method = "Post";
-                items_down.Container = cc;
-                items_down.Allowautoredirect = true;
-                items_down.Postdata = "ds=&validate_code=" + code + "&basic%5Breal_name%5D=&basic%5Bmobile%5D=&basic%5Bemail%5D=&basic%5Bjob%5D=&basic%5Bcompany%5D=&basic%5Bprovince%5D=&basic%5Bcity%5D=&basic%5Bindustry%5D=";
-                res = helper_down.GetHtml(items_down).Html;
+                res = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = url,
+                    Referer = referurl,
+                    Method = "Post",
+                    Container = cc,
+                    Allowautoredirect = true,
+                    Postdata = "ds=&validate_code=" + code + "&basic%5Breal_name%5D=&basic%5Bmobile%5D=&basic%5Bemail%5D=&basic%5Bjob%5D=&basic%5Bcompany%5D=&basic%5Bprovince%5D=&basic%5Bcity%5D=&basic%5Bindustry%5D="
+                }).Html;
                 if (!"<script>document.domain='csdn.net';parent.show_validate_pop();</script>".Equals(res))
                 {
                         //if (code != "")
@@ -1635,88 +1785,53 @@ namespace xCsdn
 
         #region 评分
 
-
         private void command()
         {
           StartPoint:
-            string[] status = { "批量评分", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-
             //string[] msg = new string[4];
             if (listConSource == null || listConSource.Count == 0)
             {
-                status[0] = "获取评分列表";
-                status[1] = "开始";
-                status[2] = "开始获取";
-                status[3] = "耐心等待";
-                status[4] = "默认5线程/账户 进行操作";
-                Logscomsole(status);
+                Logscomsole(new string[] { "获取评分列表", "开始", "开始获取", "耐心等待", "默认5线程/账户 进行操作" });
                 listConSource = new List<CsdnResouce>();
-
                 Logscomsole(getCommandList());
-                if (listConSource.Count == 0)
-                {
-                    status[0] = "批量评分";
-                    status[1] = "失败";
-                    status[2] = "已无可评分资源";
-                    status[3] = "";
-                    status[4] = "";
-                    Logscomsole(status);
-                    getInfo();
-                    if (pointNum !=-1 &&JfCount >= pointNum)
-                    {
-                        auto();
-                        return;
-
-                    }
-                    else if(isInAuto )
-                    {
-                        status[0] = "批量评分";
-                        status[1] = "失败";
-                        status[2] = "已无可评分资源";
-                        status[3] = "任务未完成状态";
-                        status[4] = "5分钟后自动重试";
-                        Logscomsole(status);
-                        Thread.Sleep(1000*60*5);
-                        goto StartPoint;
-                    }
-                    return;
-                }
+                //if (listConSource.Count == 0)
+                //{
+                //    Logscomsole(new string[] { "批量评分", "失败", "已无可评分资源", "", "" });
+                //    getInfo();
+                //    if (pointNum !=-1 &&JfCount >= pointNum)
+                //    {
+                //        auto();
+                //        return;
+                //    }
+                //    else if(isInAuto )
+                //    {
+                //        Logscomsole(new string[] { "批量评分", "失败", "已无可评分资源", "任务未完成状态", "5分钟后自动重试" });
+                //        Thread.Sleep(1000*60*5);
+                //        goto StartPoint;
+                //    }
+                //    return;
+                //}
             }
-            status[0] = "批量评分";
-            status[1] = "开始";
-            status[2] = "开始执行";
-            status[3] = "";
-            status[4] = "";
-            //status = { "批量评分", "开始", "开始执行", "无验证码", "无附加信息" };
-            Logscomsole(status);
+            Logscomsole(new string[] { "批量评分", "开始", "开始执行", "", "" });
 
             foreach (CsdnResouce item in listConSource)
             {
                 string[] msg = commandOne(item);
                 Logscomsole(msg);
-    
                 if (msg[4].Contains("间隔60秒"))
                 {
                     Thread.Sleep(TimeForCom);
                     msg = commandOne(item);
-                   // Console.WriteLine("Com:\t" + item.Name + ":\t" + msg[4]);
                 }
                 if ("成功".Equals(msg[1]))
                 {
                     Thread.Sleep(TimeForCom);
                 }
             }
-            status[1] = "结束";
-            status[2] = "执行完毕";
-            status[3] = "";
-            status[4] = "";
-            Logscomsole(status);
-
-            listConSource = new List<CsdnResouce>();
-            thread_com = new Thread(new ThreadStart(command));
-            thread_com.Start();
+            Logscomsole(new string[] { "批量评分", "结束", "执行完毕", "", "" });
         }
-        public string Decode(string s)
+
+        private  string Decode(string s)
         {
             return new Regex(@"\\u([0-9a-fA-F]{4})").Replace(s, m =>
             {
@@ -1728,6 +1843,7 @@ namespace xCsdn
                 return m.Value;
             });
         }
+
         private string[] commandOne(CsdnResouce item, string code = "")
         {
 
@@ -1736,13 +1852,11 @@ namespace xCsdn
             {
                 status[2] = "验证码:"+code ;
             }
-
-            items_com = new HttpItems();
-            items_com.URL = "http://download.csdn.net/index.php/comment/get_comment_data/" + item.Id + @"/1?jsonpcallback=jsonp1448000002880&&t=1448000436379";
-            //http://download.csdn.net/index.php/comment/get_comment_data/5342735/1?jsonpcallback=jsonp1448000002880&&t=1448000436379
-            items_com.Container = cc;
-            items_com .Referer =item.Url ;
-            hr_com = helper_com.GetHtml(items_com );
+            hr_com = new HttpHelpers().GetHtml(new HttpItems() {
+                URL = "http://download.csdn.net/index.php/comment/get_comment_data/" + item.Id + @"/1?jsonpcallback=jsonp1448000002880&&t=1448000436379",
+                Container = cc,
+                Referer = item.Url 
+            } );
 
             string rehtml = hr_com.Html.Replace("\\r\\n", "").Replace("\\n", "").Replace("\\t", "").Replace(" ", "");
             rehtml = Decode(rehtml);
@@ -1756,28 +1870,27 @@ namespace xCsdn
                     rehtml = m.Groups[2].Value;
                 }
             }
-
-            //rehtml =mccont[0].Groups[2].Value;
-
             //getCommandList();
             long epochS = (DateTime.Now.AddSeconds(-5).ToUniversalTime().Ticks - 621355968000000000) / 10000;
             long epochE = (DateTime.Now.ToUniversalTime().Ticks - 621355968000000000) / 10000;
             //Get评论
-            items_com = new HttpItems();
-
             int index = ran.Next(comMsg.Length);
             string commentcon=comMsg [index ]+"，"+rehtml ;
+            string url;
+
             if ("".Equals(code))
             {
-                items_com.URL = string.Format("http://download.csdn.net/index.php/comment/post_comment?jsonpcallback=jsonp{0}&sourceid={1}&content={2}&rating={3}&t={4}", epochS, item.Id, new XJHTTP().UrlEncoding(item.Name + commentcon ), new Random().Next(3, 6), epochE);
+                url = string.Format("http://download.csdn.net/index.php/comment/post_comment?jsonpcallback=jsonp{0}&sourceid={1}&content={2}&rating={3}&t={4}", epochS, item.Id, new XJHTTP().UrlEncoding(item.Name + commentcon ), new Random().Next(3, 6), epochE);
             }
             else
             {
-                items_com.URL = string.Format("http://download.csdn.net/index.php/comment/post_comment?jsonpcallback=jsonp{0}&sourceid={1}&content={2}&txt_validcode={3}&rating={4}&t={5}", epochS, item.Id, new XJHTTP().UrlEncoding(item.Name + commentcon), code, new Random().Next(3, 6), epochE);
+                url = string.Format("http://download.csdn.net/index.php/comment/post_comment?jsonpcallback=jsonp{0}&sourceid={1}&content={2}&txt_validcode={3}&rating={4}&t={5}", epochS, item.Id, new XJHTTP().UrlEncoding(item.Name + commentcon), code, new Random().Next(3, 6), epochE);
             }
 
-            items_com.Container = cc;
-            string html = helper_com.GetHtml(items_com).Html;
+            string html = new HttpHelpers().GetHtml(new HttpItems() {
+                URL =url ,
+                Container =cc 
+            }).Html;
 
             //评论成功完成
             if (html.Contains("\"succ\":1"))
@@ -1786,11 +1899,6 @@ namespace xCsdn
                 status[1] = "成功";
                 status[3] = "当前积分：" + JfCount.ToString();
                 status[4] = item.Name + comMsg[index];
-                //item.Rel = "成功";
-                //item.Msg = item.Name + comMsg[index] +(code == "" ? "" : "\t验证码：" + code);
-                //item.Log = "当前积分：" + JfCount.ToString();
-                //Logscomsole("", "", "", item);
-                //return "1";
             }
             else
             {
@@ -1834,10 +1942,6 @@ namespace xCsdn
         private string getcomVcode(string referurl)
         {
             string[] status = { "模拟下载", "成功/失败", "状态信息", "无验证码", "无附加信息" };
-            //if (code != "")
-            //{
-            //    status[3] = "验证码:" + code;
-            //}
             status[0] = "模拟下载";
             status[1] = "";
             status[2] = "";
@@ -1852,39 +1956,36 @@ namespace xCsdn
             while (tryTime < 5)
             {
                 tryTime++;
-                items_com = new HttpItems();
-                items_com.URL = @"http://download.csdn.net/index.php/rest/tools/validcode/comment_validate/10.1749821768607" + new Random().Next().ToString();
-                items_com.Referer = referurl;
-                items_com.Container = this.cc;
-                items_com.ResultType = ResultType.Byte;
-                hr_com = helper_com.GetHtml(items_com);
+
+                hr_com = new HttpHelpers().GetHtml(new HttpItems()
+                {
+
+                    URL = @"http://download.csdn.net/index.php/rest/tools/validcode/comment_validate/10.1749821768607" + new Random().Next().ToString(),
+                    Referer = referurl,
+                    Container = this.cc,
+                    ResultType = ResultType.Byte,
+                     
+                });
                 imgbyte =hr_com.ResultByte;
                 code = getImgVcode(imgbyte );
                 if (code == "")
                 {
                     continue;
                 }
-                items_com = new HttpItems();
-                items_com.URL = @"http://download.csdn.net/index.php/comment/check_validcode/" + code;
-                items_com.Referer = referurl;
-                items_com.Container = cc;
-                //items.Allowautoredirect = true;
-                //items.Postdata = "ds=&validate_code=" + code + "&basic%5Breal_name%5D=&basic%5Bmobile%5D=&basic%5Bemail%5D=&basic%5Bjob%5D=&basic%5Bcompany%5D=&basic%5Bprovince%5D=&basic%5Bcity%5D=&basic%5Bindustry%5D=";
-                res = helper_com.GetHtml(items_com).Html;
+                res = new HttpHelpers().GetHtml(new HttpItems()
+                {
+                    URL = @"http://download.csdn.net/index.php/comment/check_validcode/" + code,
+                    Referer = referurl,
+                    Container = cc
+                }).Html;
                 if (res != "验证码错误")
                 {
                     return code;
                 }
                 //File.WriteAllBytes(System.Environment.CurrentDirectory + @"\Codes\" + imgbyte.Length.ToString() + "_" + code + ".bmp", imgbyte);
             }
-            status[0] = "识别评分验证码";
-            status[1] = "失败";
-            status[2] = "次数:"+tryTime .ToString ();
-            status[3] = "";
-            status[4] = "";
-            Logscomsole(status);
+            Logscomsole(new string[] { "识别评分验证码", "失败", "次数:" + tryTime.ToString(),"","" });
             //Logscomsole("识别评分验证码", "失败", "次数：" + tryTime.ToString());
-
             return "";
         }
 
@@ -1898,16 +1999,14 @@ namespace xCsdn
             status[4] = "";
            // Logscomsole(status);
 
-
             PreComCount = 0;
             CanComCount = 0;
 
-            //int index = 1;
             //我的下载资源页的资源列表  
-            items_com = new HttpItems();
-            items_com.URL = "http://download.csdn.net/my/downloads";
-            items_com.Container = cc;
-            hr_com = helper_com.GetHtml(items_com);
+            hr_com = new HttpHelpers().GetHtml(new HttpItems() {
+                URL = "http://download.csdn.net/my/downloads",
+                Container = cc
+            });
             string DownHtml = hr_com.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
             string result = Regex.Replace(DownHtml, @"<!--(.+?)-->", "");
             //获取下载资源数量
@@ -1920,19 +2019,15 @@ namespace xCsdn
             }
             status[1] = "成功";
             status[2] = "下载数："+DowCount .ToString ();
-
-            //Logscomsole("获取下载数", "成功", "当前下载为 " + DowCount.ToString() + " 次");
             //获取剩余积分
             Regex regJf = new Regex("<em>积分：(.+?)</em>");
             MatchCollection mcJf = regJf.Matches(result);
             if (mcJf.Count > 0)
             {
                 int.TryParse(mcJf[0].Groups[1].Value, out jfCount);
-                //tslMyCount.Text = mcJf[0].Groups[1].Value;
             }
 
             status[3] = "积分数："+jfCount .ToString ();
-           // Logscomsole("获取积分数", "成功", "当前积分为 " + jfCount.ToString() + " 分");
   
             //加载数据，Csdn是6个一页
             double Ys = Math.Ceiling(DowCount / 6);
@@ -1971,10 +2066,11 @@ namespace xCsdn
             {
                 for (int i = 1; i <= Ys; i++)
                 {
-                    items_com = new HttpItems();
-                    items_com.URL = "http://download.csdn.net/my/downloads/" + i;
-                    items_com.Container = cc;
-                    hr_com = helper_com.GetHtml(items_com);
+                    hr_com = new HttpHelpers().GetHtml(new HttpItems() {
+
+                        URL = "http://download.csdn.net/my/downloads/" + i,
+                        Container = cc
+                    });
                     string Down2Html = hr_com.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
                     string result2 = Regex.Replace(Down2Html, @"<!--(.+?)-->", "");
                     //SetList(result2);
@@ -2024,7 +2120,6 @@ namespace xCsdn
             //Logscomsole("获取可评分列表", "结束", "获取到 " + CanComCount.ToString() + " 条可评分记录, " + PreComCount.ToString() + " 条10分钟以内记录");
         }
 
-
         private void threadForScan(object param)
         {
             int s, e;
@@ -2037,16 +2132,11 @@ namespace xCsdn
                 p.Item2.Set();
                 return;
             }
-           // Console.WriteLine("线程chuli：" + s.ToString());
-            HttpHelpers tmpHelpers = new HttpHelpers();
-            HttpItems tmpItems = new HttpItems();
-            HttpResults tmpHr = new HttpResults();
             List<CsdnResouce> tmplist = new List<CsdnResouce>();
-
-
-            tmpItems.URL = "http://download.csdn.net/my/downloads/" + s;
-            tmpItems.Container = cc;
-            tmpHr = tmpHelpers.GetHtml(tmpItems);
+            HttpResults    tmpHr = new HttpHelpers ().GetHtml(new HttpItems() {
+                URL = "http://download.csdn.net/my/downloads/" + s,
+                Container = cc
+            });
             string Down2Html = tmpHr.Html.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(" ", "");
             string result2 = Regex.Replace(Down2Html, @"<!--(.+?)-->", "");
             //SetList(result2);
@@ -2079,8 +2169,6 @@ namespace xCsdn
                     string[] ids = cdsr.Url.Split('/');
                     cdsr.Id = ids[ids.Length - 1];
                     tmplist.Add(cdsr);
-                    //commandOne(cdsr );
-                    
                 }
             }
             if (tmplist.Count > 0)
@@ -2089,13 +2177,10 @@ namespace xCsdn
                 {
                     listConSource.AddRange(tmplist );
                 }
-
             }
             s++;
             new Thread(new ParameterizedThreadStart(threadForScan))
                     .Start(new Tuple<int[], EventWaitHandle>(new int[] { s, e }, p .Item2 ));
-
-
         }
 
         #endregion 评分
@@ -2134,14 +2219,6 @@ namespace xCsdn
                 log = string.Format("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}",DateTime.Now.ToString("hh:mm:ss.ffff"), string.IsNullOrEmpty (NickName ) ? "UNKNOWN" : NickName, msg [0], msg[1], msg[2],msg [3] ,msg[4]);
           
             }
-            //if (cdsr == null)
-            //{
-            //    log = string.Format("{4}\t用户:{0}\t{1}\t{2}\t{3}", NickName == "" ? "UNKNOWN" : NickName, method, res, msg, DateTime.Now.ToString("hh:mm:ss.ffff"));
-            //}
-            //else
-            //{
-            //    log = string.Format("{4}\t用户:{0}\t{1}\t{2}\t{3}\t{5}", NickName == "" ? "UNKNOWN" : NickName, cdsr.Method, cdsr.Rel, cdsr.Msg, DateTime.Now.ToString("hh:mm:ss.ffff"), cdsr.Log);
-            //}
             if(log !="" && showLogs !=null )
             showLogs (log );
         }
@@ -2149,53 +2226,12 @@ namespace xCsdn
         public CsdnHelper(string user,string pass)
         {
             cc = new CookieContainer();
-            helper_down = new HttpHelpers();
-            helper_com = new HttpHelpers();
             this.user = user;
             this.pass = pass;
             this.SavePath = System.Environment.CurrentDirectory+@"\"+this.user ;
         }
     }
 
-
-    public class methodMsg
-    {
-        private string method;
-
-        public string Method
-        {
-            get { return method; }
-            set { method = value; }
-        }
-        private string result;
-
-        public string Result
-        {
-            get { return result; }
-            set { result = value; }
-        }
-        private string status;
-
-        public string Status
-        {
-            get { return status; }
-            set { status = value; }
-        }
-        private string vcode;
-
-        public string Vcode
-        {
-            get { return vcode; }
-            set { vcode = value; }
-        }
-        private string logs;
-
-        public string Logs
-        {
-            get { return logs; }
-            set { logs = value; }
-        }
-    }
 
     /// <summary>
     /// 资源信息
